@@ -1,6 +1,6 @@
 # IE 8 page rendering sample
 
-#### IE8 rendering problem
+## IE8 rendering problem
 
 In IE8 renderer there is a rendering bug that prevents creating pages rasterization in an up-scaled context. Draw() will be clipped at pixel dimensions of actual display area (the visible rectangle you see is the original display area in the scale of rendering context). 
 
@@ -8,7 +8,7 @@ So, if there is a scaled target that is larger than actual size, while scaled, i
 
 If it doesn't clip for somebody on genuine IE8, then there probably are remainders of later IE in the system or there is other non-scratch setup, system update or update. 
 
-##### Workaround possibilities
+## Workaround possibilities
 
 It is possible to workaround, though workarounds are a bit nasty. 
 
@@ -18,13 +18,13 @@ Instead, it can be rendered through another, now outdated API: *IHTMLElementRend
 
 First, there is the bug of clipping. It can be handled easier than IViewObject, because clipping occurs at large values beyond screen dimensions.  Second, when using device context transformations it either will not work or will mess the rendered html, so one   can't actually rely on scale or translate. Both problems require relatively non-trivial handling and complicate one another.
 
-#### The solution 
+## The solution 
 
 Below is somewhat non-optimal but working on most simple pages solution. In general it is possible to achieve a perfect and more efficient solution. Obviously it is IE8 only, so one needs to check browser version and execute different handlers for IE8 or IE9 or higher. Some ideas here can apply to improve newer browsers rendering as well.
 
 There are two interrelated workarounds here. 
 
-##### Up-scaling 
+### Up-scaling 
 
 First is: how do we upscale the vector content to the printer quality if we can't transform? The workaround here is to render to a context compatible with printer dc. What will happen is that content will be rendered at printer DPI. Note it will not fit exactly printer width, it will scale to printerDPI/screenDPI. 
 
@@ -32,7 +32,7 @@ Later, on rasterization, we downscale to fit the printer width. We render initia
 
 Another note is that one should take not just printer width, but also possible non-printable margins that need to be queried from printer and handled appropriatelym. So it may re-scaled by printer even if one provides bitmap in exact printer dimensions. But again, I doubt this resolution disparity will make any difference for a real project. 
 
-##### Clipping
+### Clipping
 
 Second to overcome is clipping. To do that, we render content in chunks less than window size which are not clipped by the renderer. After rendering a chunk, we change the scroll position of the document and render next chunk to the appropriate position in the target DC. This can be optimized to use larger chunks e.g. nearest DPI multiple to 1024 with window resize, but I didn't implement that (it is just speed optimization). If one doesn't make this optimization, there is a need to ensure that minimum browser window size is not too small.
 
