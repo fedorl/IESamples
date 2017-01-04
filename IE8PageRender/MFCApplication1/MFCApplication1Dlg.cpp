@@ -102,6 +102,7 @@ BOOL CMFCApplication1Dlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+	m_browser.put_Silent(TRUE);
 
 	OnBnClickedButton2();
 
@@ -164,7 +165,7 @@ void removeElement(IHTMLElement* pParent, IHTMLDOMNode* pChild);
 void CMFCApplication1Dlg::OnBnClickedButton2()
 {
 	COleVariant varNull;
-	COleVariant varUrl = L"http://www.google.com/search?q=ie+8+must+die";
+	COleVariant varUrl = L"http://www.bing.com/search?q=ie+must+die&qs=n";
 	m_browser.Navigate2(varUrl, varNull, varNull, varNull, varNull);
 }
 
@@ -216,8 +217,8 @@ void CMFCApplication1Dlg::OnBnClickedButton1()
 	//setup style and hide scroll bars
 	pHtmlStyle->put_border(L"0px;");
 	pHtmlStyle->put_overflow(L"hidden");
-	pBodyStyle->put_border(L"0px;");
-	pBodyStyle->put_overflow(L"hidden");
+	//pBodyStyle->put_border(L"0px;");
+	//pBodyStyle->put_overflow(L"hidden");
 
 	//get document size and visible area in screen pixels
 	SIZE docSize;
@@ -315,7 +316,7 @@ void CMFCApplication1Dlg::OnBnClickedButton1()
 	//restore changed values on browser
 	//if for large pages on slow PC you get content scrolling during rendering and it is a problem,
 	//you can either hide the browser and show "working" or place on top first chunk content
-	pBodyStyle->put_overflow(keptOverflow.bstrVal);
+	pHtmlStyle->put_overflow(keptOverflow.bstrVal);
 	pHtml2->put_scrollLeft(keptScrollPos.cx);
 	pHtml2->put_scrollTop(keptScrollPos.cy);
 	m_browser.put_Width(keptBrowserSize.cx);
@@ -400,15 +401,18 @@ CComPtr<IHTMLDOMNode> appendPadElement(IHTMLDocument2* pDoc, IHTMLElement* pBody
 	pDoc->createElement(L"DIV", &pPadElement);
 	CComPtr<IHTMLStyle> pPadStyle;
 	pPadElement->get_style(&pPadStyle);
-	CComPtr<IHTMLStyle2> pPadStyle2;
-	pPadStyle->QueryInterface(IID_IHTMLStyle2, (void**)&pPadStyle2);
-	pPadStyle2->put_position(L"absolute");
-	CComVariant value = width;
-	pPadStyle->put_width(value);
-	value = height;
-	pPadStyle->put_height(value);
-	pPadStyle->put_posLeft((float)left);
-	pPadStyle->put_posTop((float)top);
+	CString padHtml;
+	const int padLineCount = max(height / 5, 1);
+	for (int i = 0; i < padLineCount; i++)
+	{
+		padHtml.Append(L"<br> &nbsp;");
+	}
+	pPadElement->put_innerHTML(padHtml.GetBuffer());
+	CComVariant value = left+width+1;
+	pPadStyle->put_paddingLeft(value);
+	pPadStyle->put_paddingRight(value);
+	//pPadStyle->put_backgroundColor(CComVariant("red"));
+
 	CComPtr<IHTMLDOMNode> pPadNode;
 	pPadElement->QueryInterface(IID_IHTMLDOMNode, (void**)&pPadNode);
 	CComPtr<IHTMLDOMNode> pBodyNode;
