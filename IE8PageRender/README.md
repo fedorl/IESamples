@@ -20,7 +20,7 @@ First, there is the bug of clipping. It can be handled easier than IViewObject, 
 
 ## The solution 
 
-Below is somewhat non-optimal but working on most simple pages solution. In general it is possible to achieve a perfect and more efficient solution. Obviously it is IE8 only, so one needs to check browser version and execute different handlers for IE8 or IE9 or higher. Some ideas here can apply to improve newer browsers rendering as well.
+Below is somewhat non-optimal but working on most simple pages solution. In general it is possible to achieve a perfect and more efficient solution. In general it should render fine both on IE8 and IE11 (and for enhanced quality it is possible to extend rendering using IViewObject on newer browsers in the same way as DrawToDC here).
 
 There are two interrelated workarounds here. 
 
