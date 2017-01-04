@@ -72,6 +72,7 @@ END_MESSAGE_MAP()
 
 // CMFCApplication1Dlg message handlers
 
+
 BOOL CMFCApplication1Dlg::OnInitDialog()
 {
 	CDialogEx::OnInitDialog();
@@ -166,8 +167,72 @@ void CMFCApplication1Dlg::OnBnClickedButton2()
 {
 	COleVariant varNull;
 	COleVariant varUrl = L"http://www.bing.com/search?q=ie+must+die&qs=n";
+	//COleVariant varUrl = L"http://www.lipsum.com/";
 	m_browser.Navigate2(varUrl, varNull, varNull, varNull, varNull);
 }
+
+class CBitmapDC
+{
+public:
+	CDC dc;
+	BYTE* pMemory;
+	HBITMAP hBitmap;
+	HBITMAP hOldBmp;
+	BITMAPINFOHEADER infoHeader;
+
+	CBitmapDC(const RECT& fitRect, HDC hTargetDC)
+	{
+		dc.Attach(::CreateCompatibleDC(hTargetDC));
+		infoHeader = { 0 };
+		infoHeader.biSize = sizeof(infoHeader);
+		infoHeader.biWidth = fitRect.right;
+		infoHeader.biHeight = -fitRect.bottom;
+		infoHeader.biPlanes = 1;
+		infoHeader.biBitCount = 24;
+		infoHeader.biCompression = BI_RGB;
+
+		BITMAPINFO info;
+		info.bmiHeader = infoHeader;
+		//create bitmap
+		pMemory = 0;
+		hBitmap = ::CreateDIBSection(dc.GetSafeHdc(), &info, DIB_RGB_COLORS, (void**)&pMemory, 0, 0);
+		hOldBmp = (HBITMAP)dc.SelectObject(hBitmap);
+	}
+
+	CDC& GetDC()
+	{
+		return dc;
+	}
+
+	void WriteToFile(CString fileName)
+	{
+		BITMAPFILEHEADER fileHeader = { 0 };
+		fileHeader.bfType = 0x4d42;
+		fileHeader.bfSize = 0;
+		fileHeader.bfReserved1 = 0;
+		fileHeader.bfReserved2 = 0;
+		fileHeader.bfOffBits = sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
+
+		CFile file(
+			fileName,
+			CFile::modeCreate | CFile::modeReadWrite | CFile::shareDenyNone);
+		file.Write((char*)&fileHeader, sizeof(fileHeader));
+		file.Write((char*)&infoHeader, sizeof(infoHeader));
+
+		int bytes = (((24 * infoHeader.biWidth + 31) & (~31)) / 8) * abs(infoHeader.biHeight);
+		file.Write(pMemory, bytes);
+
+	}
+
+	virtual ~CBitmapDC()
+	{
+		dc.SelectObject(hOldBmp);
+		if (hBitmap)
+			::DeleteObject(hBitmap);
+	}
+
+};
+
 
 
 void CMFCApplication1Dlg::OnBnClickedButton1()
@@ -249,12 +314,14 @@ void CMFCApplication1Dlg::OnBnClickedButton1()
 	const int printHorRes = ::GetDeviceCaps(hPrintDC, HORZRES);
 	const SIZE printChunkSize = { printLogPx * clientChunkSize.cx / wndLogPx, printLogPy * clientChunkSize.cy / wndLogPy };
 
+	CreateDirectory(L"c:\\temp\\ietst", NULL);
+
 	//browser total unscaled print area in printer pixel space
 	const RECT printRectPx = { 0, 0, docSize.cx* printLogPx / wndLogPx, docSize.cy*printLogPy / wndLogPy };
-	//unscaled target EMF size in 0.01 mm with printer resolution
-	const RECT outRect001Mm = { 0, 0, 2540 * docSize.cx / wndLogPx, 2540 * docSize.cy / wndLogPy };
-	HDC hMetaDC = CreateEnhMetaFile(hPrintDC, L"c:\\temp\\test.emf", &outRect001Mm, NULL);
-	::FillRect(hMetaDC, &printRectPx, (HBRUSH)::GetStockObject(BLACK_BRUSH));
+	CBitmapDC bmp(printRectPx, hPrintDC);
+	CDC& bmpDC = bmp.GetDC();
+	bmpDC.SetGraphicsMode(GM_ADVANCED);
+	::FillRect(bmpDC.GetSafeHdc(), &printRectPx, (HBRUSH)::GetStockObject(WHITE_BRUSH));
 
 	//unscaled chunk EMF size in pixels with printer resolution
 	const RECT chunkRectPx = { 0, 0, printChunkSize.cx, printChunkSize.cy };
@@ -268,11 +335,10 @@ void CMFCApplication1Dlg::OnBnClickedButton1()
 	CComPtr<IHTMLElementRender> pRender;
 	pHtml->QueryInterface(IID_IHTMLElementRender, (void**)&pRender);
 	COleVariant printName = L"EMF";
-	pRender->SetDocumentPrinter(printName.bstrVal, hMetaDC);
 
 
 	//current positions and target area
-	RECT chunkDestRectPx = { 0, 0, printChunkSize.cx, printChunkSize.cy };
+	const RECT chunkDestRectPx = { 0, 0, printChunkSize.cx, printChunkSize.cy };
 	POINT clientPos = { 0, 0 };
 	POINT printPos = { 0, 0 };
 
@@ -284,17 +350,28 @@ void CMFCApplication1Dlg::OnBnClickedButton1()
 		{
 			//update horizontal scroll position and set target area
 			pHtml2->put_scrollLeft(clientPos.x);
-			chunkDestRectPx.left = printPos.x;
-			chunkDestRectPx.right = printPos.x + printChunkSize.cx;
 
 			//render to new emf, can be optimized to avoid recreation
-			HDC hChunkDC = CreateEnhMetaFile(hPrintDC, NULL, &chunkRect001Mm, NULL);
+			CString chunkName = L"c:\\temp\\ietst\\test";
+			chunkName.AppendFormat(L"-%d-%d", clientPos.y, clientPos.x);
+			chunkName.Append(L".emf");
+			HDC hChunkDC = CreateEnhMetaFile(hPrintDC, chunkName, &chunkRect001Mm, NULL);
+			//after debugging create emf with null name in memory
+			//HDC hChunkDC = CreateEnhMetaFile(hPrintDC, NULL, &chunkRect001Mm, NULL);
+			::SetGraphicsMode(hChunkDC, GM_ADVANCED);
 			::FillRect(hChunkDC, &chunkRectPx, (HBRUSH)::GetStockObject(WHITE_BRUSH));
+			pRender->SetDocumentPrinter(L"EMF", hChunkDC);
 			pRender->DrawToDC(hChunkDC);
 			HENHMETAFILE hChunkMetafile = CloseEnhMetaFile(hChunkDC);
 
-			//copy chunk to the main metafile
-			PlayEnhMetaFile(hMetaDC, hChunkMetafile, &chunkDestRectPx);
+			//copy chunk
+			XFORM offset = { (FLOAT)1, (FLOAT)0, (FLOAT)0, (FLOAT)1, (FLOAT)printPos.x, (FLOAT)printPos.y };
+			bmpDC.SetWorldTransform(&offset);
+			::FillRect(bmpDC.GetSafeHdc(), &chunkDestRectPx, (HBRUSH)::GetStockObject(GRAY_BRUSH));
+			if (!bmpDC.PlayMetaFile(hChunkMetafile, &chunkDestRectPx))
+			{
+				MessageBox(L"EMF failed");
+			}
 			DeleteEnhMetaFile(hChunkMetafile);
 
 			//update horizontal positions
@@ -309,8 +386,6 @@ void CMFCApplication1Dlg::OnBnClickedButton1()
 		clientPos.y += clientChunkSize.cy;
 		printPos.y += printChunkSize.cy;
 		pHtml2->put_scrollTop(clientPos.y);
-		chunkDestRectPx.top = printPos.y;
-		chunkDestRectPx.bottom = printPos.y + printChunkSize.cy;
 	}
 
 	//restore changed values on browser
@@ -323,11 +398,7 @@ void CMFCApplication1Dlg::OnBnClickedButton1()
 	m_browser.put_Height(keptBrowserSize.cy);
 	removeElement(pBody, pPadNode);
 
-	//draw to bitmap and close metafile
-	HENHMETAFILE hMetafile = CloseEnhMetaFile(hMetaDC);
-	RECT fitRect = { 0, 0, printHorRes, docSize.cy * printHorRes / docSize.cx };
-	convertEmfToBitmap(fitRect, hWndDc, hMetafile, L"c:\\temp\\test.bmp");
-	DeleteEnhMetaFile(hMetafile);
+	bmp.WriteToFile(L"c:\\temp\\ietst\\test.bmp");
 
 	//cleanup - probably more here
 	::ReleaseDC(m_hWnd, hWndDc);
@@ -342,56 +413,14 @@ void CMFCApplication1Dlg::OnBnClickedButton1()
 }
 
 
-
 ///////////////
 ////some util 
 
 void convertEmfToBitmap(const RECT& fitRect, HDC hTargetDC, HENHMETAFILE hMetafile, LPCTSTR fileName)
 {
-	//Create memory DC to render into
-	HDC hCompDc = ::CreateCompatibleDC(hTargetDC);
-	//NOTE this 
-	BITMAPINFOHEADER infoHeader = { 0 };
-	infoHeader.biSize = sizeof(infoHeader);
-	infoHeader.biWidth = fitRect.right;
-	infoHeader.biHeight = -fitRect.bottom;
-	infoHeader.biPlanes = 1;
-	infoHeader.biBitCount = 24;
-	infoHeader.biCompression = BI_RGB;
-
-	BITMAPINFO info;
-	info.bmiHeader = infoHeader;
-
-	//create bitmap
-	BYTE* pMemory = 0;
-	HBITMAP hBitmap = ::CreateDIBSection(hCompDc, &info, DIB_RGB_COLORS, (void**)&pMemory, 0, 0);
-	HBITMAP hOldBmp = (HBITMAP)::SelectObject(hCompDc, hBitmap);
-
-
-	PlayEnhMetaFile(hCompDc, hMetafile, &fitRect);
-
-	BITMAPFILEHEADER fileHeader = { 0 };
-	fileHeader.bfType = 0x4d42;
-	fileHeader.bfSize = 0;
-	fileHeader.bfReserved1 = 0;
-	fileHeader.bfReserved2 = 0;
-	fileHeader.bfOffBits = sizeof(BITMAPFILEHEADER)+sizeof(BITMAPINFOHEADER);
-
-	CFile file(
-		fileName,
-		CFile::modeCreate | CFile::modeReadWrite | CFile::shareDenyNone);
-	file.Write((char*)&fileHeader, sizeof(fileHeader));
-	file.Write((char*)&infoHeader, sizeof(infoHeader));
-
-	int bytes = (((24 * infoHeader.biWidth + 31) & (~31)) / 8) * abs(infoHeader.biHeight);
-	file.Write(pMemory, bytes);
-
-	::SelectObject(hCompDc, hOldBmp);
-
-	//Clean up
-	if (hBitmap)
-		::DeleteObject(hBitmap);
-	::DeleteDC(hCompDc);
+	CBitmapDC bmpDC(fitRect, hTargetDC);
+	PlayEnhMetaFile(bmpDC.GetDC().GetSafeHdc(), hMetafile, &fitRect);
+	bmpDC.WriteToFile(fileName);
 }
 
 
@@ -402,15 +431,18 @@ CComPtr<IHTMLDOMNode> appendPadElement(IHTMLDocument2* pDoc, IHTMLElement* pBody
 	CComPtr<IHTMLStyle> pPadStyle;
 	pPadElement->get_style(&pPadStyle);
 	CString padHtml;
-	const int padLineCount = max(height / 5, 1);
-	for (int i = 0; i < padLineCount; i++)
+	const int padLineCount = max(height/2, 1);
+	const int padColumnCount = left+width+1;
+	for (int y = 0; y < padLineCount; y++)
 	{
-		padHtml.Append(L"<br> &nbsp;");
+		padHtml.Append(L"<br>");
 	}
+	for (int x = 0; x < padColumnCount; x++)
+	{
+		padHtml.Append(L"&nbsp;");
+	}
+	padHtml.Append(L"<br>");
 	pPadElement->put_innerHTML(padHtml.GetBuffer());
-	CComVariant value = left+width+1;
-	pPadStyle->put_paddingLeft(value);
-	pPadStyle->put_paddingRight(value);
 	//pPadStyle->put_backgroundColor(CComVariant("red"));
 
 	CComPtr<IHTMLDOMNode> pPadNode;
