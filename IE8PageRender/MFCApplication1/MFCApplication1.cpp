@@ -8,6 +8,7 @@
 #include "afxpriv.h"
 //#include <..\src\occimpl.h>
 #include "ControlSite.h"
+#include <sstream>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -40,8 +41,81 @@ CMFCApplication1App theApp;
 
 // CMFCApplication1App initialization
 
+
+BOOL SetupIEVersion()
+{
+	wchar_t pFileName[2048];
+	memset(pFileName, 0, sizeof(pFileName));
+	if (!GetModuleFileName(NULL, pFileName, 2048))
+	{
+		OutputDebugStringA("failed to get file name");
+		return FALSE;
+	}
+	std::wstring fileName(pFileName);
+	std::size_t found = fileName.find_last_of(_T("/\\"));
+	if (found < 0)
+		found = 0;
+	found++;
+	fileName = fileName.substr(found, fileName.size());
+	OutputDebugString((_T("file name: ") + fileName + _T("\n")).c_str());
+
+	//set IE8 emu
+	{
+		const wchar_t* _MS_FEATURE_BROWSER_EMULATION =
+			_T("Software\\Microsoft\\Internet Explorer\\Main\\FeatureControl\\FEATURE_BROWSER_EMULATION");
+		CRegKey regKey;
+		LSTATUS regStatus =
+			regKey.Open(HKEY_CURRENT_USER, _MS_FEATURE_BROWSER_EMULATION);
+		if (regStatus == ERROR_FILE_NOT_FOUND)
+		{
+			regStatus = regKey.Create(HKEY_CURRENT_USER, _MS_FEATURE_BROWSER_EMULATION);
+		}
+		if (regStatus != ERROR_SUCCESS)
+		{
+			OutputDebugStringA("error opening registry key code");
+			return FALSE;
+		}
+		regStatus = regKey.SetDWORDValue(fileName.c_str(), 11000);
+		if (regStatus != ERROR_SUCCESS)
+		{
+			OutputDebugStringA("error setting registry value code=");
+			return FALSE;
+		}
+	}
+	//force GDI to get vector EMF
+	{
+		const wchar_t* _MS_FEATURE_BROWSER_DRAWMODE =
+			_T("Software\\Microsoft\\Internet Explorer\\Main\\FeatureControl\\FEATURE_IVIEWOBJECTDRAW_DMLT9_WITH_GDI");
+		CRegKey regKey;
+		LSTATUS regStatus =
+			regKey.Open(HKEY_CURRENT_USER, _MS_FEATURE_BROWSER_DRAWMODE);
+		if (regStatus == ERROR_FILE_NOT_FOUND)
+		{
+			regStatus = regKey.Create(HKEY_CURRENT_USER, _MS_FEATURE_BROWSER_DRAWMODE);
+		}
+		if (regStatus != ERROR_SUCCESS)
+		{
+			OutputDebugStringA("error opening registry key code");
+			return FALSE;
+		}
+		regStatus = regKey.SetDWORDValue(fileName.c_str(), 00000001);
+		if (regStatus != ERROR_SUCCESS)
+		{
+			OutputDebugStringA("error setting registry value code=");
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+
+
 BOOL CMFCApplication1App::InitInstance()
 {
+	if (!SetupIEVersion())
+		return FALSE;
+
 	// InitCommonControlsEx() is required on Windows XP if an application
 	// manifest specifies use of ComCtl32.dll version 6 or later to enable
 	// visual styles.  Otherwise, any window creation will fail.
